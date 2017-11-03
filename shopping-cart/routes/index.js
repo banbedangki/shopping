@@ -1,7 +1,9 @@
 var express = require('express');
 var router = express.Router();
+
 var Footballplayer = require('../models/footballplayer');
 var Cart = require ('../models/cart.js');
+var Order = require('../models/order');
 
 /* GET home page. */
 router.get('/', function(req, res, next) {
@@ -31,6 +33,22 @@ router.get('/add-to-cart/:id', function(req, res){
   });
 });
 
+router.get('/remove/:id', function(req, res, next){
+  var footballplayerId = req.params.id;
+  var cart = new Cart(req.session.cart ? req.session.cart : {});
+  cart.removeOne(footballplayerId);
+  req.session.cart = cart;
+  res.redirect('/shopping-cart');
+});
+
+router.get('/removeitem/:id', function(req, res, next){
+  var footballplayerId = req.params.id;
+  var cart = new Cart(req.session.cart ? req.session.cart : {});
+  cart.removeAll(footballplayerId);
+  req.session.cart = cart;
+  res.redirect('/shopping-cart');
+});
+
 router.get('/shopping-cart', function(req, res, next){
   if(!req.session.cart){
     return res.render('shop/shopping-cart', {footballplayers: null});
@@ -39,7 +57,7 @@ router.get('/shopping-cart', function(req, res, next){
   res.render('shop/shopping-cart', {footballplayers: cart.generateArray(), totalPrice: cart.totalPrice});
 });
 
-router.get('/checkout', function(req, res, next){
+router.get('/checkout', isLogin,function(req, res, next){
   if(!req.session.cart){
     return res.redirect('/shopping-cart');
   }
@@ -67,10 +85,27 @@ router.post('/checkout', function(req, res, next){
       req.flash('error', err.message);
       return res.redirect('/checkout');
     }
-    req.flash('success', 'Successful buy them!');
-    req.session.cart = null;
-    res.redirect('/');
+    var order = new Order({
+      user: req.user,
+      cart: cart,
+      address: req.body.address,
+      name: req.body.name,
+      paymentId: charge.id
+    });
+    order.save(function(err, result){
+      req.flash('success', 'Successful buy them!');
+      req.session.cart = null;
+      res.redirect('/');
+    });
   });
 });
 
 module.exports = router;
+
+function isLogin(req, res, next){
+    if(req.isAuthenticated()){
+        return next();
+    }
+    req.session.oldUrl = req.url;
+    res.redirect('/user/signin');
+}
